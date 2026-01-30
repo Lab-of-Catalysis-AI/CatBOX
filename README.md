@@ -4,22 +4,12 @@ This script runs optimization path analysis experiments to compare the performan
 
 ![algorithm2](E:\science\BO\DDLBO\文章写作整理\figures\流程图\algorithm2.png)
 
-## Features
-
-- **Multiple Optimization Algorithms**: Supports SMKBO, CASMOPOLITAN, COCABO, MVRSM, TPE, Random Search, and GPyOpt
-- **Various Problem Types**: 
-  - Chemistry problems (OCM1（sperated）, OCM2（Combined）)
-  - DAR (Drug Activity Response)
-  - NO (Nitric Oxide)
-  - Benchmark functions (Ackley, Rosenbrock, Schwefel, Griewank)
-- **Comprehensive Data Recording**: Saves complete optimization paths including all evaluated points and their function values
-
 ## Requirements
 
 Make sure you have installed all required dependencies in requirments.txt. 
 
 And the custom modules:
-- `mixed_test_func` (Chemistry, DAR, NO, benchmark functions)
+- `mixed_test_func` (OCM, DAR, NO, benchmark functions)
 - `runners` (optimization algorithm runners)
 
 ## Usage
@@ -33,8 +23,8 @@ python run_optimization_path.py
 ### Common Parameters
 
 #### Problem Selection
-- `-p, --problem`: Problem type (default: 'NO')
-  - Options: 'OCM1', 'OCM2', 'DAR', 'NO', 'Ackley', 'Rosenbrock', 'Schwefel', 'Griewank'
+- `-p, --problem`: Problem type 
+  - Options:  'OCM2', 'DAR', 'NO', 'Ackley', 'Rosenbrock', 'Schwefel', 'Griewank'
 - `-s, --sep`: Separation mode for Chemistry problems (default: 'sep')
   - Options: 'sep', 'atom', 'M1', 'M2', 'M3', 'Support', etc.
 
@@ -130,7 +120,7 @@ The script generates the following outputs:
 Each pickle file contains a list of tuples, where each tuple represents one algorithm's results:
 ```python
 [
-    (smk_x_processed, smk_fx_processed),      # SMKBO C5G4
+    (smk_x_processed, smk_fx_processed),      # CatBOX C5G4
     (cas_x_processed, cas_fx_processed),      # CASMOPOLITAN
     (cocabo_x_processed, cocabo_fx_processed), # COCABO
     (mvrsm_x_processed, mvrsm_fx_processed),  # MVRSM
@@ -142,21 +132,3 @@ Each pickle file contains a list of tuples, where each tuple represents one algo
 
 Each `x` array has shape `(max_iters, problem_dim)` and each `fx` array has shape `(max_iters, 1)`.
 
-## Notes
-
-- The script automatically handles memory cleanup after each problem to prevent memory accumulation
-- Each trial uses a different seed (seed + trial_number) to ensure reproducibility while maintaining diversity
-- If an old result file exists, the script will attempt to merge new results with old ones
-- For mixed-type problems, categorical variables are stored as strings and continuous variables as numbers
-- The script supports resuming interrupted runs by merging with existing pickle files
-
-## Troubleshooting
-
-1. **Import Errors**: Make sure all required modules are in your Python path
-2. **Memory Issues**: The script includes automatic memory cleanup, but for very long runs, you may need to run fewer trials at a time
-3. **File Not Found**: Ensure that model files for Chemistry/DAR/NO problems are in the correct directories
-4. **Algorithm Failures**: Check the runtime_summary.csv file for detailed error messages
-
-## License
-
-[Add your license information here]
