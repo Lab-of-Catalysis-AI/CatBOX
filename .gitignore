@@ -58,7 +58,7 @@ logs/
 
 # Results and outputs
 optimization_results*/
-*.csv
+
 *.xlsx
 *.xls
 
