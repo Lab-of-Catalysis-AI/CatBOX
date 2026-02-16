@@ -1,6 +1,6 @@
 # Code for CatBOX
 
-This script runs optimization path analysis experiments to compare the performance of different optimization algorithms on various problems. It records all X (input points) and y (function values) data throughout the optimization process. Website for CatBOX: [CatBOX](catbox.top)
+This script runs optimization path analysis experiments to compare the performance of different optimization algorithms on various problems. It records all X (input points) and y (function values) data throughout the optimization process. Website for CatBOX: [CatBOX](https://catbox.top)
 
 ![algorithm overview](./algorithm2.png)
 
