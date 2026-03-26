@@ -1,0 +1,2 @@
+trial,algorithm,sep_mode,success,duration_sec,error
+2,GPyOpt,normal,False,2263.7794713974,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()

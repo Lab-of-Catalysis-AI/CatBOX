@@ -1,0 +1,36 @@
+trial,algorithm,sep_mode,success,duration_sec,error
+0,SMKBO_C5G4,sep,True,3790.903377532959,
+0,CASMOPOLITAN,sep,True,865.0097796916962,
+0,COCABO,sep,False,0.2551000118255615,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+0,MVRSM,sep,True,48.71533727645874,
+0,TPE,sep,True,38.42150521278381,
+0,RandomSearch,sep,True,31.77192234992981,
+0,GPyOpt,sep,True,281.6350984573364,
+1,SMKBO_C5G4,sep,True,3677.7998266220093,
+1,CASMOPOLITAN,sep,True,822.6278462409973,
+1,COCABO,sep,False,0.1677405834197998,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+1,MVRSM,sep,True,33.76207375526428,
+1,TPE,sep,True,41.46548914909363,
+1,RandomSearch,sep,True,38.64158844947815,
+1,GPyOpt,sep,True,463.8517236709595,
+2,SMKBO_C5G4,sep,True,3660.008904695511,
+2,CASMOPOLITAN,sep,True,855.1144506931305,
+2,COCABO,sep,False,0.20405220985412598,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+2,MVRSM,sep,True,39.33630061149597,
+2,TPE,sep,True,33.142600297927856,
+2,RandomSearch,sep,True,29.6984703540802,
+2,GPyOpt,sep,True,3121.6789815425873,
+3,SMKBO_C5G4,sep,True,3825.2836635112762,
+3,CASMOPOLITAN,sep,True,862.8391873836517,
+3,COCABO,sep,False,0.2359452247619629,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+3,MVRSM,sep,True,41.51781511306763,
+3,TPE,sep,True,35.01977872848511,
+3,RandomSearch,sep,True,31.583113193511963,
+3,GPyOpt,sep,True,430.7122106552124,
+4,SMKBO_C5G4,sep,True,3769.488035917282,
+4,CASMOPOLITAN,sep,True,851.6449689865112,
+4,COCABO,sep,False,0.21830415725708008,The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+4,MVRSM,sep,True,43.227686643600464,
+4,TPE,sep,True,36.112674713134766,
+4,RandomSearch,sep,True,32.73106789588928,
+4,GPyOpt,sep,True,4050.724636077881,

@@ -1,0 +1,7 @@
+trial,algorithm,sep_mode,success,duration_sec
+4,SMKBO_C5G4,sep,True,2351.7397694587708
+4,COCABO,sep,True,630.7414336204529
+4,MVRSM,sep,True,40.68918585777283
+4,TPE,sep,True,33.8246328830719
+4,RandomSearch,sep,True,31.585296869277954
+4,GPyOpt,sep,True,581.0787255764008
