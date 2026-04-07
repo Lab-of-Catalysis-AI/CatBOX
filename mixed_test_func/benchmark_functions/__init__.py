@@ -1,14 +1,6 @@
 from .benchmark_functions import (
-    Ackley,
-    Camel,
-    Dejong,
-    Michalewicz,
-    Rosenbrock,
-    perm0dbeta,
-    Rastrigin,
-    Zakharov,
-    Levy,
-    Schwefel,
-    Griewank,
-    Levy13,
+    Ackley_benchmark as Ackley,
+    Rosenbrock_benchmark as Rosenbrock,
+    Schwefel_benchmark as Schwefel,
+    Griewank_benchmark as Griewank,
 )
