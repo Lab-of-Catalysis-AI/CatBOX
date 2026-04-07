@@ -1,0 +1,6 @@
+trial,algorithm,sep_mode,success,duration_sec
+0,DDLBO,benchmark,True,841.0994200706482
+1,DDLBO,benchmark,True,833.635999917984
+2,DDLBO,benchmark,True,888.8673238754272
+3,DDLBO,benchmark,True,933.2297821044922
+4,DDLBO,benchmark,True,866.5986113548279

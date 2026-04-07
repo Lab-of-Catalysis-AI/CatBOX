@@ -1,0 +1,7 @@
+trial,algorithm,sep_mode,success,duration_sec,error
+0,DDLBO,benchmark,True,644.8606994152069,
+1,DDLBO,benchmark,True,925.1667227745056,
+2,DDLBO,benchmark,True,1037.0830082893372,
+3,DDLBO,benchmark,True,959.8079655170441,
+4,DDLBO,benchmark,False,13.104681730270386,"Expected value argument (Tensor of shape (1,)) to be within the support (Real()) of the distribution Normal(loc: 0.0, scale: 1.0), but found invalid values:
+tensor([nan], grad_fn=<DivBackward0>)"
