@@ -12,7 +12,7 @@ import torch
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mixed_test_func import Chemistry,DAR,SCR,Ackley_benchmark,Rosenbrock_benchmark,Schwefel_benchmark,Griewank_benchmark
+from mixed_test_func import OCM,DAR,SCR,Ackley_benchmark,Rosenbrock_benchmark,Schwefel_benchmark,Griewank_benchmark
 
 from runners import run_cas, run_cocabo, run_mvrsm, run_tpe, run_random_search, run_gpyopt
 
@@ -99,12 +99,12 @@ def run_optimization_path_analysis():
     
     # If --run_all is specified, set all algorithms to run
     if args.run_all:
-        args.run_smk = 0
-        args.run_cas = 0
-        args.run_cocabo = 0
-        args.run_mvrsm = 0
-        args.run_tpe = 0
-        args.run_rs = 0
+        args.run_smk = 1
+        args.run_cas = 1
+        args.run_cocabo = 1
+        args.run_mvrsm = 1
+        args.run_tpe = 1
+        args.run_rs = 1
         args.run_gpyopt = 1
         print("Running all algorithms: SMKBO, CAS, COCABO, MVRSM, TPE, RS, EDBO, GPyOpt")
     options = vars(args)
@@ -183,7 +183,7 @@ def run_optimization_path_analysis():
             
 
                 if args.problem == 'OCM2' or args.problem == 'OCM1':
-                    f = Chemistry(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep, prob=args.problem)
+                    f = OCM(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep, prob=args.problem)
                 elif args.problem == 'DAR':
                     f = DAR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
                 elif args.problem == 'SCR':

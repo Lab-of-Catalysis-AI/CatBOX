@@ -37,19 +37,7 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Model files and data (large files)
-*.pkl
-*.h5
-*.hdf5
-*.pt
-*.pth
-*.ckpt
-*.model
-*.bin
-
-# Autogluon models (large directories)
-**/AutogluonModels/
-**/AutogluonModels/**/*
+# Large model files are tracked with Git LFS
 
 # Log files
 *.log
