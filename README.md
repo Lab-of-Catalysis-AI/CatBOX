@@ -1,133 +1,141 @@
 # Code for CatBOX
 
-This script runs optimization path analysis experiments to compare the performance of different optimization algorithms on various problems. It records all X (input points) and y (function values) data throughout the optimization process. Website for CatBOX: [CatBOX](https://catbox.top)
+This repository contains the code and pretrained surrogate models used for CatBOX optimization path analysis experiments. It records both the queried inputs `X` and objective values `y` across the optimization process so results can be reproduced and compared across algorithms.
+
+Website for CatBOX: [CatBOX](https://catbox.top)
 
 ![algorithm overview](./algorithm5.png)
 
-## Requirements
+## Reproducibility Checklist
 
-Make sure you have installed all required dependencies in `requirements.txt`.
+To reproduce the included experiments reliably:
 
-And the custom modules:
-- `mixed_test_func` (OCM, DAR, SCR, benchmark functions)
-- `runners` (optimization algorithm runners)
+1. Use Python `3.10` or `3.11`.
+2. Install Git LFS before cloning or run `git lfs pull` after cloning.
+3. Install the pinned packages from `requirements.txt`.
+4. Run `python optimization_path_analysis/run_optimization_path.py --help` first to confirm the environment is healthy.
+
+The current dependency stack was not validated on Python `3.12`, and some packages may fail there even before an experiment starts.
+The shipped AutoGluon predictors were created with AutoGluon `1.2` and Python `3.10`; loading them with newer AutoGluon releases may fail at inference time.
+
+## Repository Contents
+
+- `optimization_path_analysis/`: experiment entrypoint and algorithm runners
+- `mixed_test_func/`: benchmark problems and surrogate-based chemistry/SCR/DAR objectives
+- `cas/`, `cocabo/`, `mvrsm/`: optimization backends
+- `optimization_results_update/`: default output directory for generated results
+
+## Installation
+
+```bash
+git lfs install
+git clone <your-repo-url>
+cd package_to_GitHub
+git lfs pull
+python -m pip install -r requirements.txt
+```
 
 ## Usage
 
-### Basic Usage
+### Show all options
 
 ```bash
-python optimization_path_analysis/run_optimization_path.py
+python optimization_path_analysis/run_optimization_path.py --help
 ```
+
+### Important behavior
+
+- `--run_all` defaults to `1`.
+- If you only want selected algorithms, set `--run_all 0` and then enable the needed `--run_*` flags.
+- Supported real/surrogate problems: `OCM`, `DAR`, `SCR`
+- Supported benchmark problems: `Ackley`, `Rosenbrock`, `Schwefel`, `Griewank`
 
 ### Common Parameters
 
-#### Problem Selection
-- `-p, --problem`: Problem type (default: `SCR`)
-  - Options: `'OCM2'`, `'DAR'`, `'SCR'`, `'Ackley'`, `'Rosenbrock'`, `'Schwefel'`, `'Griewank'`
-- `-s, --sep`: Separation mode for Chemistry problems (default: `'sep'`)
-  - Options: `'sep'`, `'atom'`, `'M1'`, `'M2'`, `'M3'`, `'Support'`, etc.
+#### Problem selection
 
-#### Benchmark Function Settings
-- `--n_categorical`: Number of categorical variables (default: 3)
-- `--n_continuous`: Number of continuous variables (default: 10)
-- `--num_opts`: Number of options for categorical variables (default: 5)
+- `-p, --problem`: problem name
+- `-s, --sep`: separation mode for SCR/DAR style problems
+- `--init_design`: initialization design, usually `random` or `best`
 
-#### Optimization Settings
-- `--max_iters`: Maximum number of BO iterations (default: 150)
-- `--n_init`: Number of initial random points (default: 20)
-- `--n_trials`: Number of trials for the experiment (default: 1)
-- `--seed`: Initial seed setting (default: 20)
-- `--batch_size`: Batch size for BO (default: 1)
-- `-a, --acq`: Acquisition function choice (default: `'ei'`)
-  - Options: `'ucb'`, `'ei'`, `'thompson'`
+#### Benchmark settings
 
-#### Algorithm Selection
-- `--run_smk`: Run SMKBO (0 or 1, default: 0)
-- `--run_cas`: Run CASMOPOLITAN (0 or 1, default: 0)
-- `--run_cocabo`: Run COCABO (0 or 1, default: 0)
-- `--run_mvrsm`: Run MVRSM (0 or 1, default: 0)
-- `--run_tpe`: Run TPE (0 or 1, default: 0)
-- `--run_rs`: Run Random Search (0 or 1, default: 0)
-- `--run_gpyopt`: Run GPyOpt (0 or 1, default: 0)
-- `--run_all`: Run all algorithms (0 or 1, default: 1)
+- `--n_categorical`: number of categorical variables
+- `--n_continuous`: number of continuous variables
+- `--num_opts`: number of options for each categorical variable
 
-#### SMKBO Specific Parameters
-- `--num_mixtures1`: Number of Cauchy mixtures (default: 5)
-- `--num_mixtures2`: Number of Gaussian mixtures (default: 4)
-- `-cont_k, --continuous_kern_type`: Continuous kernel type (default: `'smk'`)
-  - Options: `'mat52'`, `'rbf'`, `'smk'`
+#### Optimization settings
 
-#### COCABO Specific Parameters
-- `-mix, --kernel_mix`: Mixture weight for production and summation kernel (default: 0.3)
+- `--max_iters`: total optimization iterations
+- `--n_init`: number of initial random points
+- `--n_trials`: number of repeated trials
+- `--seed`: base random seed
+- `--batch_size`: batch size
+- `-a, --acq`: acquisition choice, one of `ucb`, `ei`, `thompson`
 
-#### Other Parameters
-- `--save_path`: Save directory for log files (default: `'optimization_results_update'`)
-- `--lamda`: Noise level to inject (default: 1e-6)
-- `--ard`: Enable automatic relevance determination (flag)
-- `--no_save`: Do not save results (flag)
-- `--infer_noise_var`: Infer noise variance (flag)
-- `--init_design`: Initialization design (default: `'random'`)
-  - Options: `'random'`, `'best'`, `'non_zero'`
+#### Algorithm flags
 
-## Examples
+- `--run_smk`
+- `--run_cas`
+- `--run_cocabo`
+- `--run_mvrsm`
+- `--run_tpe`
+- `--run_rs`
+- `--run_gpyopt`
 
-### Example 1: Run SCR problem with all algorithms
+## Example Commands
+
+### SCR with all algorithms
 
 ```bash
 python optimization_path_analysis/run_optimization_path.py -p SCR --run_all 1 --max_iters 100 --n_trials 5
 ```
 
-### Example 2: Run Ackley benchmark function with specific parameters
+### OCM with CASMOPOLITAN only
 
 ```bash
-python optimization_path_analysis/run_optimization_path.py -p Ackley --n_categorical 3 --n_continuous 10 --num_opts 5 --run_gpyopt 1 --max_iters 150
+python optimization_path_analysis/run_optimization_path.py -p OCM --run_all 0 --run_cas 1 --max_iters 200 --n_init 30
 ```
 
-### Example 3: Run Chemistry OCM2 problem with CASMOPOLITAN only
+Running `-p OCM` now automatically uses the shipped `OCM2_all_update_true` surrogate model.
 
-```bash
-python optimization_path_analysis/run_optimization_path.py -p OCM2 -s sep --run_cas 1 --run_all 0 --max_iters 200 --n_init 30
-```
-
-### Example 4: Run multiple benchmark functions with custom settings
-
-```bash
-python optimization_path_analysis/run_optimization_path.py -p Rosenbrock --n_categorical 5 --n_continuous 20 --num_opts 10 --run_cocabo 1 --run_mvrsm 1 --run_all 0 --max_iters 150 --seed 42
-```
-
-### Example 5: Run with best initialization design
+### DAR with best initialization
 
 ```bash
 python optimization_path_analysis/run_optimization_path.py -p DAR --init_design best --run_all 1 --max_iters 150
 ```
 
-## Output
+### Ackley benchmark with GPyOpt only
 
-The script generates the following outputs:
+```bash
+python optimization_path_analysis/run_optimization_path.py -p Ackley --run_all 0 --run_gpyopt 1 --n_categorical 3 --n_continuous 10 --num_opts 5 --max_iters 150
+```
 
-1. **Pickle Files**: Optimization path data saved as `.pkl` files
-   - Filename format: `{problem}_{sep_mode}_{acq}_{trial}_path_analysis.pkl`
-   - Contains tuples of `(x_history, fx_history)` for each algorithm
-   - Saved in: `{save_path}/{problem}_{sep_mode}/`
+## Outputs
 
-2. **Runtime Summary**: CSV file with runtime information
-   - Filename: `runtime_summary.csv`
-   - Contains: trial number, algorithm name, separation mode, success status, duration, errors
+The script writes:
 
-### Output File Structure
+1. Optimization path `.pkl` files
+2. A `runtime_summary.csv` file for the current save directory
 
-Each pickle file contains a list of tuples, where each tuple represents one algorithm's results:
+### Output layout
+
+- Real/surrogate problems: `{save_path}/{problem}_{sep}/`
+- Benchmark problems: `{save_path}/benchmarks{n_categorical}+{n_continuous}+{num_opts}/{problem}/`
+
+### Pickle structure
+
+Each saved pickle contains a list of tuples:
 
 ```python
 [
-    (smk_x_processed, smk_fx_processed),       # CatBOX C5G4
-    (cas_x_processed, cas_fx_processed),       # CASMOPOLITAN
-    (cocabo_x_processed, cocabo_fx_processed), # COCABO
-    (mvrsm_x_processed, mvrsm_fx_processed),   # MVRSM
-    (tpe_x_processed, tpe_fx_processed),       # TPE
-    (gpyopt_x_processed, gpyopt_fx_processed), # GPyOpt
-    (rs_x_processed, rs_fx_processed)          # Random Search
+    (smk_x_processed, smk_fx_processed),
+    (cas_x_processed, cas_fx_processed),
+    (cocabo_x_processed, cocabo_fx_processed),
+    (mvrsm_x_processed, mvrsm_fx_processed),
+    (tpe_x_processed, tpe_fx_processed),
+    (gpyopt_x_processed, gpyopt_fx_processed),
+    (rs_x_processed, rs_fx_processed),
 ]
 ```
 

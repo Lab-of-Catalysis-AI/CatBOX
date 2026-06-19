@@ -15,7 +15,7 @@ warnings.filterwarnings('ignore')
 class Chemistry(TestFunction):
     problem_type = 'mixed'
     # OCM returns -fx
-    def __init__(self, lamda=1e-6, normalize=False, seed=None, sep='atom', prob='OCM2'):
+    def __init__(self, lamda=1e-6, normalize=False, seed=None, sep='all_update_true', prob='OCM'):
         super().__init__(normalize=normalize)
         self.sep = sep
         self.current_dir = os.path.dirname(__file__)
@@ -28,9 +28,8 @@ class Chemistry(TestFunction):
         self.dim = len(self.categorical_dims) + len(self.continuous_dims)
         self.config = self.n_vertices
 
-        # true_atom and all_update_true use sep model but with different variable formats
-        model_sep = 'sep' if self.sep in ['true_atom', 'all_update_true'] else self.sep
-        load_path = os.path.join(self.current_dir, 'AutogluonModels', f'{self.prob}_{model_sep}')
+        model_prefix = 'OCM2' if self.prob == 'OCM' else self.prob
+        load_path = os.path.join(self.current_dir, 'AutogluonModels', f'{model_prefix}_{self.sep}')
 
         try:
             self.model = TabularPredictor.load(load_path, require_version_match=False, require_py_version_match=False)
@@ -137,47 +136,36 @@ class Chemistry(TestFunction):
             if normalize:
                 res = (res - self.mean) / self.std
             return -res.reshape(-1, 1)
-        
+
         elif self.sep == 'all_update_true':
             # Parse merged_all format: M1_M1_mol|M2_M2_mol|M3_M3_mol|Support
             merged_all_strings = X1['merged_all']
-            
-            # Split by '|' to get 4 parts: M1_M1_mol, M2_M2_mol, M3_M3_mol, Support
+
             split_data = merged_all_strings.str.split('|', expand=True)
-            
-            # Extract M1, M1_mol from first part (format: M1_M1_mol)
+
             m1_parts = split_data[0].str.split('_', expand=True)
             M1 = m1_parts[0]
             M1_mol = pd.to_numeric(m1_parts[1], errors='coerce')
-            
-            # Extract M2, M2_mol from second part
+
             m2_parts = split_data[1].str.split('_', expand=True)
             M2 = m2_parts[0]
             M2_mol = pd.to_numeric(m2_parts[1], errors='coerce')
-            
-            # Extract M3, M3_mol from third part
+
             m3_parts = split_data[2].str.split('_', expand=True)
             M3 = m3_parts[0]
             M3_mol = pd.to_numeric(m3_parts[1], errors='coerce')
-            
-            # Extract Support from fourth part
+
             Support = split_data[3]
-            
-            # Handle n.a. cases
+
             M1_mol.loc[M1 == 'n.a.'] = 0
             M2_mol.loc[M2 == 'n.a.'] = 0
             M3_mol.loc[M3 == 'n.a.'] = 0
-            
-            # Create X_sep with correct column order for sep model
+
             X_sep = pd.DataFrame(index=X.index)
-            
-            # Encode categorical variables using sep_encoder
             X_sep['M1'] = self.sep_encoder.encoders['M1'].transform(M1.astype(str))
             X_sep['M2'] = self.sep_encoder.encoders['M2'].transform(M2.astype(str))
             X_sep['M3'] = self.sep_encoder.encoders['M3'].transform(M3.astype(str))
             X_sep['Support'] = self.sep_encoder.encoders['Support'].transform(Support.astype(str))
-            
-            # Add continuous variables (M1_mol, M2_mol, M3_mol extracted from merged_all, others from X)
             X_sep['M1_mol'] = M1_mol
             X_sep['M2_mol'] = M2_mol
             X_sep['M3_mol'] = M3_mol
@@ -186,12 +174,11 @@ class Chemistry(TestFunction):
             X_sep['CH4_flow'] = X['CH4_flow']
             X_sep['O2_flow'] = X['O2_flow']
             X_sep['CT'] = X['CT']
-            
-            # Use sep format for prediction
+
             res = self.model.predict(X_sep)
             res += self.lamda * np.random.rand(*res.shape)
             res = res.to_numpy()
-            
+
             if normalize:
                 res = (res - self.mean) / self.std
             return -res.reshape(-1, 1)
@@ -237,19 +224,23 @@ class Chemistry(TestFunction):
         return predictor
 
     def get_data(self):
-        if self.prob == 'OCM2':
+        if self.prob == 'OCM':
             if self.sep in ['all_update', 'all_update_true']:
                 file_path = os.path.join(self.current_dir, "OCM_data_with_performance2_with_name_update.csv")
             else:
                 file_path = os.path.join(self.current_dir, "OCM_data_with_performance2.csv")
-        elif self.prob == 'OCM1':
-            file_path = os.path.join(self.current_dir, "OCM_data_with_performance1.csv")
+        else:
+            raise ValueError(f"Unsupported chemistry problem '{self.prob}'. Only 'OCM' is supported.")
+
+        if not os.path.exists(file_path) and self.prob == 'OCM':
+            fallback_path = os.path.join(self.current_dir, "OCM_data_with_performance2_with_name_update.csv")
+            if os.path.exists(fallback_path):
+                file_path = fallback_path
 
         self.data = pd.read_csv(file_path, index_col=None)
-        if self.sep in ['all_update', 'all_update_true']:
-            drop_cols = [col for col in ['Name', 'Unnamed: 0'] if col in self.data.columns]
-            if drop_cols:
-                self.data = self.data.drop(columns=drop_cols)
+        drop_cols = [col for col in ['Name', 'Unnamed: 0'] if col in self.data.columns]
+        if drop_cols:
+            self.data = self.data.drop(columns=drop_cols)
         self.data['y'] = self.data['Performance']
         self.encoder = CategoricalEncoder()
 
@@ -299,7 +290,7 @@ class Chemistry(TestFunction):
         self.lb = np.array([self.x[i].min() for i in self.cont_var])
         self.ub = np.array([self.x[i].max() for i in self.cont_var])
         
-        # For true_atom and all_update_true modes: create separate encoder for sep format variables
+        # true_atom and all_update_true both reuse the sep-style feature layout internally
         if self.sep in ['true_atom', 'all_update_true']:
             self.sep_encoder = CategoricalEncoder()
             self.sep_encoder.to_cat(self.data[self.sep_cat_var])
@@ -400,4 +391,4 @@ class CategoricalEncoder:
         return decoded_df
 
 if __name__ == "__main__":
-    Chemistry(normalize=False, lamda=1e-6, seed=1, sep='atom', prob='OCM2')
+    Chemistry(normalize=False, lamda=1e-6, seed=1, sep='all_update_true', prob='OCM')

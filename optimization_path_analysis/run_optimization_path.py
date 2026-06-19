@@ -1,20 +1,149 @@
-import numpy as np
 import argparse
+import gc
 import os
 import pickle
 import sys
 import time
+import traceback
+
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
-import gc
-import torch
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mixed_test_func import OCM,DAR,SCR,Ackley_benchmark,Rosenbrock_benchmark,Schwefel_benchmark,Griewank_benchmark
-
 from runners import run_cas, run_cocabo, run_mvrsm, run_tpe, run_random_search, run_gpyopt
+
+
+SUPPORTED_BENCHMARK_PROBLEMS = {"Ackley", "Rosenbrock", "Schwefel", "Griewank"}
+SUPPORTED_EXPERIMENT_PROBLEMS = {"OCM", "DAR", "SCR"}
+SUPPORTED_PROBLEMS = SUPPORTED_EXPERIMENT_PROBLEMS | SUPPORTED_BENCHMARK_PROBLEMS
+
+
+def normalize_problem_name(problem_name):
+    """
+    Return the canonical public problem name used by this repo.
+    """
+    return problem_name
+
+
+def load_torch():
+    """
+    Import torch lazily so that `--help` and non-torch checks can still run in
+    environments where torch is not available or is misconfigured.
+    """
+    try:
+        import torch
+        return torch
+    except Exception:
+        return None
+
+
+def build_problem(args, trial_seed):
+    """
+    Build the objective function for the current trial.
+    Imports are intentionally local to avoid import-time dependency failures for
+    unrelated problems/algorithms.
+    """
+    problem_name = normalize_problem_name(args.problem)
+
+    if problem_name == "OCM":
+        from mixed_test_func.Chemistry.chemistry import Chemistry
+        return Chemistry(normalize=False, lamda=args.lamda, seed=trial_seed, sep="all_update_true", prob="OCM")
+    if problem_name == "DAR":
+        from mixed_test_func.DAR.DAR import DAR
+        return DAR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
+    if problem_name == "SCR":
+        from mixed_test_func.SCR.SCR import SCR
+        return SCR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
+    if problem_name == "Ackley":
+        from mixed_test_func.benchmark_functions import Ackley
+        return Ackley(
+            n_categorical=args.n_categorical,
+            n_continuous=args.n_continuous,
+            num_opts=args.num_opts,
+            normalize=False,
+            seed=trial_seed,
+        )
+    if problem_name == "Rosenbrock":
+        from mixed_test_func.benchmark_functions import Rosenbrock
+        return Rosenbrock(
+            n_categorical=args.n_categorical,
+            n_continuous=args.n_continuous,
+            num_opts=args.num_opts,
+            normalize=False,
+            seed=trial_seed,
+        )
+    if problem_name == "Schwefel":
+        from mixed_test_func.benchmark_functions import Schwefel
+        return Schwefel(
+            n_categorical=args.n_categorical,
+            n_continuous=args.n_continuous,
+            num_opts=args.num_opts,
+            normalize=False,
+            seed=trial_seed,
+        )
+    if problem_name == "Griewank":
+        from mixed_test_func.benchmark_functions import Griewank
+        return Griewank(
+            n_categorical=args.n_categorical,
+            n_continuous=args.n_continuous,
+            num_opts=args.num_opts,
+            normalize=False,
+            seed=trial_seed,
+        )
+    raise ValueError(f"Unrecognised problem type {problem_name}")
+
+
+def fx_is_missing(fx_values):
+    if fx_values is None:
+        return True
+
+    fx_array = np.asarray(fx_values)
+    if fx_array.size == 0:
+        return True
+
+    try:
+        return bool(np.isnan(fx_array.astype(float)).all())
+    except (TypeError, ValueError):
+        return False
+
+
+def merge_existing_results(filename, new_results):
+    """
+    Keep previously saved data only when the new run produced no usable values
+    for that algorithm slot. This avoids corrupting current outputs while still
+    helping interrupted reruns.
+    """
+    if not os.path.exists(filename):
+        return new_results
+
+    try:
+        with open(filename, "rb") as file_obj:
+            old_results = pickle.load(file_obj)
+    except Exception as exc:
+        print(f"Failed to read existing results from {filename}, saving new results only. Reason: {exc}")
+        return new_results
+
+    if not isinstance(old_results, list):
+        return new_results
+
+    merged_results = []
+    for idx, (new_x, new_fx) in enumerate(new_results):
+        if idx < len(old_results):
+            old_pair = old_results[idx]
+            if (
+                isinstance(old_pair, (list, tuple))
+                and len(old_pair) == 2
+                and fx_is_missing(new_fx)
+            ):
+                merged_results.append((old_pair[0], old_pair[1]))
+                continue
+        merged_results.append((new_x, new_fx))
+
+    print(f"Merging usable existing results into {filename}...")
+    return merged_results
 
 
 def clear_memory():
@@ -22,8 +151,8 @@ def clear_memory():
     Clear memory to prevent issues caused by memory accumulation
     """  
     try:
-        # Clear PyTorch cache
-        if torch.cuda.is_available():
+        torch = load_torch()
+        if torch is not None and torch.cuda.is_available():
             torch.cuda.empty_cache()
         # Force garbage collection
         gc.collect()
@@ -96,6 +225,13 @@ def run_optimization_path_analysis():
     parser.add_argument('--run_all',type=int, default=1, help='Run all algorithms (SMKBO, CAS, COCABO, MVRSM, TPE, RS, EDBO, GPyOpt)')
 
     args = parser.parse_args()
+    args.problem = normalize_problem_name(args.problem)
+
+    if args.problem not in SUPPORTED_PROBLEMS:
+        parser.error(f"Unsupported problem '{args.problem}'. Choose from: {sorted(SUPPORTED_PROBLEMS)}")
+
+    if args.problem == "OCM":
+        args.sep = "all_update_true"
     
     # If --run_all is specified, set all algorithms to run
     if args.run_all:
@@ -106,7 +242,19 @@ def run_optimization_path_analysis():
         args.run_tpe = 1
         args.run_rs = 1
         args.run_gpyopt = 1
-        print("Running all algorithms: SMKBO, CAS, COCABO, MVRSM, TPE, RS, EDBO, GPyOpt")
+        print("Running all algorithms: SMKBO, CAS, COCABO, MVRSM, TPE, RS, GPyOpt")
+
+    if not any([
+        args.run_smk,
+        args.run_cas,
+        args.run_cocabo,
+        args.run_mvrsm,
+        args.run_tpe,
+        args.run_rs,
+        args.run_gpyopt,
+    ]):
+        parser.error("No algorithms selected. Use --run_all 1 or enable at least one --run_* flag.")
+
     options = vars(args)
     print("Optimization Path Analysis Configuration:")
     print(options)
@@ -118,42 +266,27 @@ def run_optimization_path_analysis():
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     save_dir_ori = os.path.join(cur_dir, args.save_path)
 
-    sep_modes = ['sep']
-    #problems = ['Ackley','Dejong', 'Michalewicz', 'Rosenbrock','Levy','Rastrigin']
-    problems = ['SCR']
-    
-    # Define different parameter combinations: (n_categorical, n_continuous, num_opts)
-    param_combinations = [
-        (3, 20, 5),   # 3+20+5
-        (3, 30, 5),   # 3+30+5
-        (5, 30, 5),   # 5+30+5
-        (10, 30, 5),  # 10+30+5
-    ]
-    
-    # for n_cat, n_cont, n_opts in param_combinations:
-    #     args.n_categorical = n_cat
-    #     args.n_continuous = n_cont
-    #     args.num_opts = n_opts
-    #     print(f'\n{"="*80}')
-    #     print(f'Running with parameters: n_categorical={n_cat}, n_continuous={n_cont}, num_opts={n_opts}')
-    #     print(f'{"="*80}')
-        
-    #     # Create benchmark directory for current parameter combination (without modifying original save_dir_ori)
-    #     # For benchmark mode, base directory is benchmarks{n_cat}+{n_cont}+{n_opts}
+    benchmark_mode = args.problem in SUPPORTED_BENCHMARK_PROBLEMS
+    sep_modes = ['benchmark'] if benchmark_mode else [args.sep]
+    problems = [args.problem]
     benchmark_base_dir = os.path.join(save_dir_ori, f'benchmarks{args.n_categorical}+{args.n_continuous}+{args.num_opts}')
-        
+
+    base_seed = args.seed
+
     for problem in problems:
         args.problem = problem
         for sep_mode in sep_modes:
-            print(sep_mode + ' is running')
-            save_mode = args.problem + '_' + sep_mode
-            
+            display_mode = sep_mode if sep_mode == 'benchmark' else args.sep
+            print(display_mode + ' is running')
+
             if sep_mode == 'benchmark':
+                save_mode = args.problem
                 save_dir = os.path.join(benchmark_base_dir, save_mode)
             else:
+                save_mode = args.problem + '_' + sep_mode
                 save_dir = os.path.join(save_dir_ori, save_mode)
 
-            if not os.path.exists(save_dir):
+            if not args.no_save and not os.path.exists(save_dir):
                 print('save_dir ',save_dir)
                 os.makedirs(save_dir)
             print(f'\n{"="*60}')
@@ -161,7 +294,8 @@ def run_optimization_path_analysis():
             print(f'{"="*60}')
             
             # Set separation mode
-            args.sep = sep_mode
+            if sep_mode != 'benchmark':
+                args.sep = sep_mode
             runtime_records = []
             
             head = args.problem
@@ -169,40 +303,18 @@ def run_optimization_path_analysis():
                 head += '-b'
             else:
                 head += '-r'
-            head += '-' + args.sep
+            if sep_mode != 'benchmark':
+                head += '-' + args.sep
 
-            for t in tqdm(range(args.n_trials), desc=f"Optimization Path Analysis Trials ({sep_mode})", unit="trial"):
-                t = t + 2
-                print(f'\n----- Starting Optimization Path Analysis Trial {t + 1} / {args.n_trials} -----')
-                name = f"{head}_{args.acq}_{t}_path_analysis.pkl"
-                #name = 'test.pkl'
+            for trial_idx in tqdm(range(args.n_trials), desc=f"Optimization Path Analysis Trials ({display_mode})", unit="trial"):
+                trial_number = trial_idx + 1
+                print(f'\n----- Starting Optimization Path Analysis Trial {trial_number} / {args.n_trials} -----')
+                name = f"{head}_{args.acq}_{trial_number}_path_analysis.pkl"
                 filename = os.path.join(save_dir, name)
 
                 # Set different seed for each trial to ensure reproducibility but different results across trials
-                trial_seed = args.seed + t if args.seed is not None else t
-            
-
-                if args.problem == 'OCM2' or args.problem == 'OCM1':
-                    f = OCM(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep, prob=args.problem)
-                elif args.problem == 'DAR':
-                    f = DAR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
-                elif args.problem == 'SCR':
-                    f = SCR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
-                elif args.problem == 'Ackley':
-
-                    f = Ackley_benchmark(n_categorical=args.n_categorical, n_continuous=args.n_continuous,
-                                    num_opts=args.num_opts, normalize=False, seed=trial_seed)
-                elif args.problem == 'Rosenbrock':
-                    f = Rosenbrock_benchmark(n_categorical=args.n_categorical, n_continuous=args.n_continuous,
-                                    num_opts=args.num_opts, normalize=False, seed=trial_seed)
-                elif args.problem == 'Schwefel':
-                    f = Schwefel_benchmark(n_categorical=args.n_categorical, n_continuous=args.n_continuous,
-                                    num_opts=args.num_opts, normalize=False, seed=trial_seed)
-                elif args.problem == 'Griewank':
-                    f = Griewank_benchmark(n_categorical=args.n_categorical, n_continuous=args.n_continuous,
-                                    num_opts=args.num_opts, normalize=False, seed=trial_seed)
-                else:
-                    raise ValueError('Unrecognised problem type %s' % args.problem)
+                trial_seed = (base_seed + trial_idx) if base_seed is not None else trial_number
+                f = build_problem(args, trial_seed)
 
                 # Initialize fx and x arrays as empty lists to store results from each iteration
                 smk_fx_c5g4, smk_x_c5g4 = [], []  # C5G4
@@ -226,7 +338,7 @@ def run_optimization_path_analysis():
                         print(f"SMKBO (C5G4) completed with {len(smk_fx_c5g4)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'SMKBO_C5G4',
                             'sep_mode': args.sep,
                             'success': True,
@@ -236,7 +348,7 @@ def run_optimization_path_analysis():
                         duration = time.time() - start_time
                         error_msg = str(e)
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'SMKBO_C5G4',
                             'sep_mode': args.sep,
                             'success': False,
@@ -244,7 +356,6 @@ def run_optimization_path_analysis():
                             'error': error_msg
                         })
                         print(f"Error running SMKBO C5G4: {error_msg}")
-                        import traceback
                         print(f"Full traceback:")
                         traceback.print_exc()
 
@@ -258,7 +369,7 @@ def run_optimization_path_analysis():
                         print(f"CASMOPOLITAN completed with {len(cas_fx)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'CASMOPOLITAN',
                             'sep_mode': args.sep,
                             'success': True,
@@ -267,7 +378,7 @@ def run_optimization_path_analysis():
                     except Exception as e:
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'CASMOPOLITAN',
                             'sep_mode': args.sep,
                             'success': False,
@@ -281,11 +392,11 @@ def run_optimization_path_analysis():
                     try:
                         print("Running COCABO......")
                         cocabo_x, cocabo_fx = run_cocabo(f=f, budget=args.max_iters, initN=args.n_init,
-                                        kernel_mix=args.kernel_mix, n_trial=t, seed=trial_seed, args=args)
+                                        kernel_mix=args.kernel_mix, n_trial=trial_number, seed=trial_seed, args=args)
                         print(f"COCABO completed with {len(cocabo_fx)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'COCABO',
                             'sep_mode': args.sep,
                             'success': True,
@@ -294,7 +405,7 @@ def run_optimization_path_analysis():
                     except Exception as e:
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'COCABO',
                             'sep_mode': args.sep,
                             'success': False,
@@ -311,7 +422,7 @@ def run_optimization_path_analysis():
                         print(f"MVRSM completed with {len(mvrsm_fx)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'MVRSM',
                             'sep_mode': args.sep,
                             'success': True,
@@ -320,7 +431,7 @@ def run_optimization_path_analysis():
                     except Exception as e:
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'MVRSM',
                             'sep_mode': args.sep,
                             'success': False,
@@ -337,7 +448,7 @@ def run_optimization_path_analysis():
                         print(f"TPE completed with {len(tpe_fx)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'TPE',
                             'sep_mode': args.sep,
                             'success': True,
@@ -346,7 +457,7 @@ def run_optimization_path_analysis():
                     except Exception as e:
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'TPE',
                             'sep_mode': args.sep,
                             'success': False,
@@ -363,7 +474,7 @@ def run_optimization_path_analysis():
                         print(f"Random Search completed with {len(rs_fx)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'RandomSearch',
                             'sep_mode': args.sep,
                             'success': True,
@@ -372,7 +483,7 @@ def run_optimization_path_analysis():
                     except Exception as e:
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'RandomSearch',
                             'sep_mode': args.sep,
                             'success': False,
@@ -390,7 +501,7 @@ def run_optimization_path_analysis():
                         print(f"GPyOpt completed with {len(gpyopt_fx)} iterations")
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'GPyOpt',
                             'sep_mode': args.sep,
                             'success': True,
@@ -399,7 +510,7 @@ def run_optimization_path_analysis():
                     except Exception as e:
                         duration = time.time() - start_time
                         runtime_records.append({
-                            'trial': t,
+                            'trial': trial_number,
                             'algorithm': 'GPyOpt',
                             'sep_mode': args.sep,
                             'success': False,
@@ -520,81 +631,14 @@ def run_optimization_path_analysis():
                         (rs_x_processed, rs_fx_processed)               # 7: Random Search 
                     ]
 
-                    # If old file exists, merge with old results
-                    if os.path.exists(filename):
-                        try:
-                            with open(filename, 'rb') as f_old:
-                                old_results = pickle.load(f_old)
-                            
-                            merged = []
-                            for idx in range(11):
-                                new_x, new_fx = new_results[idx]
-                                old_x, old_fx = None, None
-
-                                try:
-                                    # If old file length is 11, match directly by index
-                                    if len(old_results) >= 11:
-                                        old_x, old_fx = old_results[idx]
-                                    # If old file length is 10 (possibly no GPyOpt)
-                                    elif len(old_results) == 10:
-                                        if idx < 10:
-                                            old_x, old_fx = old_results[idx]
-                                        # idx == 9 (GPyOpt) or idx == 10 (RS) may have no old data
-                                        elif idx == 10:
-                                            # RS position (new index 10) is index 9 in old file
-                                            old_x, old_fx = old_results[9]
-                                    # If old file length is 9 (possibly no EDBO or GPyOpt)
-                                    elif len(old_results) == 9:
-                                        if idx < 9:
-                                            old_x, old_fx = old_results[idx]
-                                        # idx == 9 (GPyOpt) or idx == 8 (EDBO) may have no old data
-                                        elif idx == 10:
-                                            # RS position (new index 10) is index 8 in old file
-                                            old_x, old_fx = old_results[8]
-                                    # Handle other mapping cases
-                                    elif len(old_results) == 6:
-                                        # Old order: [C5G4, CAS, COCABO, MVRSM, TPE, RS]
-                                        mapping = {2:0, 4:1, 5:2, 6:3, 7:4, 9:5}
-                                        old_idx = mapping.get(idx, None)
-                                        if old_idx is not None and old_idx < len(old_results):
-                                            old_x, old_fx = old_results[old_idx]
-                                except Exception:
-                                    old_x, old_fx = None, None
-
-                                # Determine whether to use old data
-                                use_old = False
-                                if old_x is not None and old_fx is not None:
-                                    try:
-                                        new_all_nan = False
-                                        if hasattr(new_fx, 'size') and new_fx.size > 0:
-                                            new_all_nan = bool(np.isnan(new_fx).all())
-                                        if (new_fx is None) or (hasattr(new_fx, 'size') and new_fx.size == 0) or new_all_nan:
-                                            use_old = True
-                                    except Exception:
-                                        pass
-
-                                if use_old:
-                                    merged.append((old_x, old_fx))
-                                else:
-                                    merged.append((new_x, new_fx))
-
-                            results_to_save = merged
-                            print(f"Merging results into {filename} (order: C1G8, C3G6, C5G4, C7G2, CAS, COCABO, MVRSM, TPE, EDBO, GPyOpt, RS)...")
-                        except Exception as e:
-                            print(f"Failed to merge with existing file, saving new results only. Reason: {e}")
-                            results_to_save = new_results
-                    else:
-                        results_to_save = new_results
+                    results_to_save = merge_existing_results(filename, new_results)
 
                     with open(filename, 'wb') as file:
                         pickle.dump(results_to_save, file)
                     print("Saving optimization path analysis results (x and fx) to %s..." % filename)
 
-                if args.seed is not None:
-                    args.seed += 1
-
                 print("Optimization path analysis completed!")
-                if runtime_records:
+                if runtime_records and not args.no_save:
                     runtime_df = pd.DataFrame(runtime_records)
                     runtime_csv_path = os.path.join(save_dir, 'runtime_summary.csv')
                     runtime_df.to_csv(runtime_csv_path, index=False)

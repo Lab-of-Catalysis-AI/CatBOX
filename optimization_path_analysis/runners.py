@@ -6,16 +6,9 @@ from tqdm import tqdm
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cas.optimizer import Optimizer
-from cas.optimizer_mixed import MixedOptimizer
 import time
 import numpy as np
-from cocabo.CoCaBO import CoCaBO
-from mvrsm.MVRSM import MVRSM_minimize
-from hyperopt import fmin, rand, tpe, hp, STATUS_OK, Trials
 from functools import partial
-from mvrsm.process import read_logs_MVRSM, read_logs_TPE, read_logs_RS
-import GPyOpt
 
 
 
@@ -26,6 +19,9 @@ def run_cas(f, args):
     """
     Run CAS-CatBOX algorithm without noise
     """
+    from cas.optimizer import Optimizer
+    from cas.optimizer_mixed import MixedOptimizer
+
     kwargs = {"continuous_kern_type": args.continuous_kern_type, "num_mixtures1": args.num_mixtures1,
               "num_mixtures2": args.num_mixtures2}
 
@@ -36,7 +32,7 @@ def run_cas(f, args):
         import torch
         torch.manual_seed(args.seed)
         torch.cuda.manual_seed_all(args.seed)
-    except ImportError:
+    except Exception:
         pass  # Skip if torch is not installed
 
     n_categories = f.n_vertices
@@ -157,6 +153,11 @@ def run_cocabo(f, budget, initN=24, kernel_mix=0.5, n_trial=1, seed=None, args=N
     """
     Run COCABO algorithm without noise
     """
+    from cocabo.CoCaBO import CoCaBO
+
+    if seed is not None:
+        np.random.seed(seed)
+
     categories = f.n_vertices.tolist()
     bounds = f.get_cocabo_bounds()
     print(f"Running COCABO for {budget} evaluations...")
@@ -226,7 +227,7 @@ def convert_categorical_variables(raw_x_history, noisy_f, algorithm_name):
                 cat_values = cat_names.values.flatten().tolist()
             else:
                 # For benchmark functions, directly use integers as string labels
-                cat_values = [f'{val}' for val in enumerate(cat_ints)]
+                cat_values = [str(val) for val in cat_ints]
             
             # Get continuous variable values
             if isinstance(raw_x_history[i], np.ndarray):
@@ -261,6 +262,8 @@ def run_mvrsm(f, max_evals, rand_evals, seed, args=None):
     """
     Run MVRSM algorithm without noise
     """
+    from mvrsm.MVRSM import MVRSM_minimize
+
     np.random.seed(seed)
     d, num_int, lb, ub = get_f_info(f)
 
@@ -306,6 +309,8 @@ def run_random_search(f, max_evals, seed, args=None):
     """
     Run random search algorithm without noise
     """
+    from hyperopt import fmin, rand, hp, STATUS_OK, Trials
+
     # HyperOpt and RS objective
     def hyp_obj(x):
         return {'loss': f.compute(x), 'status': STATUS_OK}
@@ -365,6 +370,8 @@ def run_tpe(f, max_evals, rand_evals, seed, args=None):
     """
     Run TPE algorithm without noise
     """
+    from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
+
     def hyp_obj(x):
         return {'loss': f.compute(x), 'status': STATUS_OK}
     np.random.seed(seed)
@@ -450,6 +457,8 @@ def run_gpyopt(f, max_evals, n_init=20, seed=None):
         fx_history: Function value history
     """
 
+    import GPyOpt
+
     if seed is not None:
         np.random.seed(seed)
 
@@ -514,12 +523,14 @@ def run_gpyopt(f, max_evals, n_init=20, seed=None):
         # Run optimization
         max_iter = max_evals - n_init
         
+        pbar = None
         if max_iter > 0:
             pbar = tqdm(total=max_iter)
             for i in range(max_iter):
                 optimizer.run_optimization(max_iter=1, eps=0)
                 pbar.update(1)
-        pbar.close()
+        if pbar is not None:
+            pbar.close()
         # Get actual data from optimizer
         x_history_raw = optimizer.X
         fx_history = optimizer.Y
@@ -557,7 +568,7 @@ def test_gpyopt():
         from mixed_test_func.Chemistry.chemistry import Chemistry
 
         # Initialize OCM problem
-        ocm = Chemistry(lamda=0, normalize=False, seed=42, sep='all_update', prob='OCM2')
+        ocm = Chemistry(lamda=0, normalize=False, seed=42, sep='all_update', prob='OCM')
 
         x_history, fx_history = run_gpyopt(
             f=ocm,
@@ -600,5 +611,3 @@ if __name__ == "__main__":
     import sys
 
     test_gpyopt()
-
-
