@@ -53,7 +53,7 @@ def build_problem(args, trial_seed):
         return Chemistry(normalize=False, lamda=args.lamda, seed=trial_seed, sep="all_update_true", prob="OCM")
     if problem_name == "DAR":
         from mixed_test_func.DAR.DAR import DAR
-        return DAR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
+        return DAR(normalize=False, lamda=args.lamda, seed=trial_seed, sep="normal")
     if problem_name == "SCR":
         from mixed_test_func.SCR.SCR import SCR
         return SCR(normalize=False, lamda=args.lamda, seed=trial_seed, sep=args.sep)
@@ -232,6 +232,8 @@ def run_optimization_path_analysis():
 
     if args.problem == "OCM":
         args.sep = "all_update_true"
+    elif args.problem == "DAR":
+        args.sep = "normal"
     
     # If --run_all is specified, set all algorithms to run
     if args.run_all:

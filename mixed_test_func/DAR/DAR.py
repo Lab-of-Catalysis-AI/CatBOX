@@ -15,7 +15,7 @@ warnings.filterwarnings('ignore')
 class DAR(TestFunction):
     problem_type = 'mixed'
 
-    def __init__(self, lamda=1e-6, normalize=False, seed=None, sep='sep'):
+    def __init__(self, lamda=1e-6, normalize=False, seed=None, sep='normal'):
         super().__init__(normalize=normalize)
         self.current_dir = os.path.dirname(__file__)
         self.seed = seed
@@ -27,43 +27,14 @@ class DAR(TestFunction):
         self.dim = len(self.categorical_dims) + len(self.continuous_dims)
         self.config = self.n_vertices
 
+        if self.sep != 'normal':
+            raise ValueError("Unsupported DAR mode. Only 'normal' is supported.")
 
-        if self.sep == 'normal':
-            load_path = os.path.join(self.current_dir, 'AutogluonModels', 'DAR_medium')
-        elif self.sep == 'sqrt':
-            load_path = os.path.join(self.current_dir, 'AutogluonModels', 'DAR_sqrt_transform')
-        elif self.sep == 'two-model':
-            load_path = os.path.join(self.current_dir, 'AutogluonModels', 'DAR_two_model')
-        elif self.sep == 'yeo-johnson':
-            load_path = os.path.join(self.current_dir, 'AutogluonModels', 'DAR_yeo_johnson_transform')
-            # Load the Yeo-Johnson transformer
-            import pickle
-            transformer_path = os.path.join(load_path, 'yeo_johnson_transformer.pkl')
-            try:
-                with open(transformer_path, 'rb') as f:
-                    self.yeo_johnson_transformer = pickle.load(f)
-                print('Loaded Yeo-Johnson transformer')
-            except FileNotFoundError:
-                print('Warning: Yeo-Johnson transformer not found')
-                self.yeo_johnson_transformer = None
-        else:
-            raise ValueError('Unknown type for handling Phase-I reaction. Choose from: normal, sqrt, yeo-johnson')
+        load_path = os.path.join(self.current_dir, 'AutogluonModels', 'DAR_medium')
         print('load_path:', load_path)
         try:
-            if self.sep == 'two-model':
-                # Load the two-model info which contains feature columns
-                import pickle
-                info_path = load_path + '_info.pkl'
-                with open(info_path, 'rb') as f:
-                    model_info = pickle.load(f)
-                self.classifier = model_info['classifier']
-                self.regressor = model_info['regressor']
-                self.feature_columns = model_info['feature_columns']
-            else:
-                self.model = TabularPredictor.load(load_path)
-                # For single model, we need to determine feature columns differently
-                # This might need adjustment based on how the original model was trained
-                self.feature_columns = None  # Will be set during first prediction
+            self.model = TabularPredictor.load(load_path, require_version_match=False, require_py_version_match=False)
+            self.feature_columns = None
         except FileNotFoundError:
             self.model = self.create_model(load_path)
 
@@ -92,38 +63,7 @@ class DAR(TestFunction):
         X_cont_df = pd.DataFrame(X_cont, columns=self.cont_var)
         X = pd.concat([X_cat_decoded, X_cont_df], axis=1)
 
-        if self.sep == 'two-model':
-            # Two-model approach: Classification + Regression
-            if self.classifier is None or self.regressor is None:
-                print('Warning: Two-model components not loaded, using default prediction')
-                res = np.zeros((X.shape[0],))
-            else:
-                # Prepare data for prediction
-                X_features = X[self.feature_columns]
-
-                # 1. Classification: predict probability of yield > 0
-                clf_pred_proba = self.classifier.predict_proba(X_features)
-                p_nonzero = clf_pred_proba.iloc[:, 1].values  # Probability of positive class
-
-                # 2. Regression: predict yield values
-                reg_pred = self.regressor.predict(X_features)
-
-                # 3. Combine: p_nonzero * reg_pred
-                res = p_nonzero * reg_pred
-
-        else:
-            # Single model approaches
-            res = self.model.predict(X)
-
-            # Apply inverse transformation
-            if self.sep == 'sqrt':
-                res = res**2
-            elif self.sep == 'yeo-johnson':
-                if self.yeo_johnson_transformer is not None:
-                    # Convert to numpy array first, then reshape
-                    res_array = res.to_numpy().reshape(-1, 1)
-                    res = self.yeo_johnson_transformer.inverse_transform(res_array).flatten()
-                    print('Before transformation:', res_array, 'After transformation:', res)
+        res = self.model.predict(X)
 
         # Add noise for all cases
         res += self.lamda * np.random.rand(*res.shape)

@@ -55,7 +55,7 @@ python optimization_path_analysis/run_optimization_path.py --help
 #### Problem selection
 
 - `-p, --problem`: problem name
-- `-s, --sep`: separation mode for SCR/DAR style problems
+- `-s, --sep`: separation mode for SCR style problems
 - `--init_design`: initialization design, usually `random` or `best`
 
 #### Benchmark settings
@@ -104,6 +104,8 @@ Running `-p OCM` now automatically uses the shipped `OCM2_all_update_true` surro
 ```bash
 python optimization_path_analysis/run_optimization_path.py -p DAR --init_design best --run_all 1 --max_iters 150
 ```
+
+Running `-p DAR` now automatically uses the shipped `DAR_medium` surrogate model in `normal` mode.
 
 ### Ackley benchmark with GPyOpt only
 
